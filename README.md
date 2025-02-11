@@ -22,7 +22,7 @@ pip install -r requirements.txt
 ## Training example
 
 ```bash
-python train.py --sam Eigen-SAM --freq 100 --epochs 200 --alpha 0.2 --batch_size 256 --dataset CIFAR100 --num_workers 4 --rho 0.1
+python train.py --sam Eigen-SAM --freq 100 --epochs 200 --alpha 0.2 --batch_size 256 --dataset CIFAR100 --num_workers 4 --rho 0.1 --seed 1
 ```
 
 ## Citation
