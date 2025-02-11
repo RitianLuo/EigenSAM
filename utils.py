@@ -21,63 +21,35 @@ def normalization(tensors):
 
 def estimate_largest_eigenvector(model, criterion, v, images, labels, steps=5):
     """
-    Estimate the largest eigenvector of the Hessian via the Power Method
-    and a manual Hessian-vector product using torch.autograd.grad.
+    Estimate the largest eigenvector of the Hessian using the Power Method.
 
     Args:
-        model (torch.nn.Module): Model for which the Hessian is computed.
-        criterion (callable): Loss function returning a scalar.
-        v (list[Tensor] or tuple[Tensor]): Initial vector (same shapes as model parameters).
-        images (torch.Tensor): Input batch to the model.
+        model (torch.nn.Module): The model.
+        criterion (callable): Loss function.
+        v (list[Tensor] or tuple[Tensor]): Initial vector (same shape as model parameters).
+        images (torch.Tensor): Input batch.
         labels (torch.Tensor): Corresponding labels.
-        steps (int): Number of iterations for the Power Method.
+        steps (int): Power Method iterations.
 
     Returns:
-        list[torch.Tensor]: The approximate dominant eigenvector of the Hessian,
-            matching the shapes of model.parameters().
+        list[torch.Tensor]: Approximate dominant eigenvector of the Hessian.
     """
-    # If v is None, randomly initialize
     if v is None:
         v = tuple(torch.randn_like(p) for p in model.parameters() if p.requires_grad)
-        
-    # 1) Switch to eval mode for stable forward (no dropout, BN in eval mode)
-    model.eval()
 
-    # 2) Forward pass and compute the loss
-    logits = model(images)
-    loss = criterion(logits, labels)
-    
-    # 3) Backward with create_graph=True, so we can compute second derivatives
-    loss.backward(create_graph=True)
+    model.eval()  # Disable dropout, batch norm updates
+    loss = criterion(model(images), labels)  # Compute loss
+    loss.backward(create_graph=True)  # First-order gradients
 
-    # 4) Collect parameters and their first-order gradients wrt 'loss'
-    #    (we call these gradsH, representing grad of the loss w.r.t. each param)
-    params, gradsH = get_params_grad(model)
+    params, gradsH = get_params_grad(model)  # Get parameters and gradients
 
-    # 5) Perform Power Method steps
-    #    In each step, we compute Hessian-vector product using:
-    #    torch.autograd.grad(gradsH, params, grad_outputs=v, ...)
     for i in range(steps):
-        # Hessian-vector product: 
-        # gradsH is [d(loss)/d(p1), d(loss)/d(p2), ...]
-        # v is our current vector (list/tuple of Tensors).
-        hvp = torch.autograd.grad(
-            outputs=gradsH,
-            inputs=params,
-            grad_outputs=v,  
-            retain_graph=True,  # keep graph if we need more iterations (i < steps - 1)
-            create_graph=False
-        )
-        # Normalize 'hvp' to get the next vector
-        v = normalization(hvp)  # v is now the updated direction
+        hvp = torch.autograd.grad(gradsH, params, grad_outputs=v, retain_graph=(i < steps - 1))
+        v = normalization(hvp)  # Normalize for next iteration
 
-    # 6) Zero out gradients so we don't pollute other computations
-    model.zero_grad(set_to_none=True)
+    model.zero_grad(set_to_none=True)  # Clear gradients
+    model.train()  # Restore train mode
 
-    # 7) Switch back to train mode if desired
-    model.train()
-
-    # 8) Return the final approximate eigenvector
     return v
 
 def modify_gradient_with_projection(model, v, alpha=0.1):
